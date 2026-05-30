@@ -12,39 +12,6 @@ param (
 
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
-# =========================================================================
-# MODULO DE AUTO-ACTUALIZACION SILENCIOSA (GITHUB RAW - V6.2 CORREGIDA)
-# =========================================================================
-$UrlScriptRemoto  = "https://raw.githubusercontent.com/joseimportantes-bit/ReporteRemoto/main/reporteClientes.ps1"
-$RutaLocalScript  = $MyInvocation.MyCommand.Path
-
-try {
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    $CodigoRemoto = Invoke-RestMethod -Uri $UrlScriptRemoto -Method Get -TimeoutSec 15
-    
-    if (-not [string]::IsNullOrWhiteSpace($CodigoRemoto) -and $CodigoRemoto -match "SISTEMA DE ALERTAS") {
-        $CodigoLocal = Get-Content -Path $RutaLocalScript -Raw
-        
-        # NORMALIZACIÓN TÉCNICA: Removemos espacios y saltos de línea para una comparación limpia
-        $RemotoLimpio = $CodigoRemoto -replace '\s+', ''
-        $LocalLimpio  = $CodigoLocal  -replace '\s+', ''
-        
-        # Si el contenido real cambió en GitHub, aplicamos el parche en caliente
-        if ($RemotoLimpio -ne $LocalLimpio) {
-            # Guardamos forzando codificación UTF-8 pura
-            $CodigoRemoto | Out-File -FilePath $RutaLocalScript -Encoding utf8 -Force
-            
-            # Lanzamos la instancia de aviso y cerramos la vieja
-            powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "$RutaLocalScript" -AccionFlasheada "ACTUALIZACION"
-            exit
-        }
-    }
-} catch {
-    # Absorción defensiva: Continúa localmente si falla la red
-}
-
-# =========================================================================
-
 # 1. CARGAR CONFIGURACIÓN LOCAL (Firma de identidad sembrada por el instalador)
 $RutaConfigJson = "$env:SystemRoot\Setup\Scripts\config.json"
 if (Test-Path $RutaConfigJson) {
@@ -164,8 +131,6 @@ if (-not [string]::IsNullOrWhiteSpace($AccionTaller)) {
     if ($HuboFalla) {
         $AccionAuditoria = "NOVEDAD"
         $StringDetalles  = $DetallesNovedad -join " | "
-    } elseif ($AccionAuditoria -eq "ACTUALIZACION") {
-        $StringDetalles  = "El agente aplico un parche de codigo en caliente desde GitHub con exito."
     }
 }
 
@@ -194,11 +159,3 @@ try {
     Invoke-RestMethod -Uri $UrlGoogleSheet -Method Post -Body $PayloadUnificado -ContentType "application/json" -TimeoutSec 15 | Out-Null
 } catch {}
 # =========================================================================
-
-
-
-# COMENTARIO DE PRUEBA LOCAL 12345 
-# Prueba de Actaulizacion en caliente 67890
-# Prueba de Actualizacion en caliente 2:44 am, 01/01/2025
-# COMENTARIO DE PRUEBA LOCAL 6789
-# Version 6.2 - Verificada
