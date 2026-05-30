@@ -1,8 +1,11 @@
-# SISTEMA DE ALERTAS TEMPRANAS Y BITÁCORA DE TALLER V4.0
+# =========================================================================
+# SISTEMA DE ALERTAS TEMPRANAS Y BITÁCORA DE TALLER MAESTRA V6.0
+# AUTOR: JOSE OROZCO | INFRAESTRUCTURA DE ALTA DISPONIBILIDAD GITHUB RAW
+# =========================================================================
 param (
     [string]$AccionFlasheada = "MONITOREO",
     
-    # NUEVOS PARÁMETROS PARA CONTROL MANUAL DESDE EL ASISTENTE DEL SSD
+    # PARÁMETROS PARA INTERCEPTAR CONTROL MANUAL DESDE EL ASISTENTE DEL SSD
     [string]$AccionTaller,
     [string]$DetalleTaller
 )
@@ -10,45 +13,29 @@ param (
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # =========================================================================
-# MODULO DE AUTO-ACTUALIZACION SILENCIOSA (CONTENEDOR ZIP REMOTE)
+# MODULO DE AUTO-ACTUALIZACION SILENCIOSA (GITHUB RAW)
 # =========================================================================
-$IdArchivoDrive   = "12s39PHkRV3R5Jf03G7aEWfRe7Sb1j4Cy"
-$UrlScriptRemoto  = "https://docs.google.com/uc?id=$IdArchivoDrive&export=download"
+$UrlScriptRemoto  = "https://raw.githubusercontent.com/joseimportantes-bit/ReporteRemoto/main/reporteClientes.ps1"
 $RutaLocalScript  = $MyInvocation.MyCommand.Path
-
-$RutaTempZipUpdate = "$env:TEMP\update_agente.zip"
-$FolderTempUpdate  = "$env:TEMP\UpdateAgenteExtract"
 
 try {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    Invoke-WebRequest -Uri $UrlScriptRemoto -OutFile $RutaTempZipUpdate -TimeoutSec 20 -ErrorAction SilentlyContinue
+    $CodigoRemoto = Invoke-RestMethod -Uri $UrlScriptRemoto -Method Get -TimeoutSec 15
     
-    if (Test-Path $RutaTempZipUpdate) {
-        if (Test-Path $FolderTempUpdate) { Remove-Item -Path $FolderTempUpdate -Recurse -Force -ErrorAction SilentlyContinue }
-        Expand-Archive -Path $RutaTempZipUpdate -DestinationPath $FolderTempUpdate -Force -ErrorAction SilentlyContinue
-        $RutaScriptUnzipped = Join-Path $FolderTempUpdate "reporteClientes.ps1"
-        
-        if (Test-Path $RutaScriptUnzipped) {
-            $CodigoRemoto = Get-Content -Path $RutaScriptUnzipped -Raw
-            if ($CodigoRemoto -match "SISTEMA DE ALERTAS") {
-                $CodigoLocal = Get-Content -Path $RutaLocalScript -Raw
-                if ($CodigoRemoto -ne $CodigoLocal) {
-                    $CodigoRemoto | Out-File -FilePath $RutaLocalScript -Encoding utf8 -Force
-                    Remove-Item -Path $RutaTempZipUpdate -Force -ErrorAction SilentlyContinue
-                    Remove-Item -Path $FolderTempUpdate -Recurse -Force -ErrorAction SilentlyContinue
-                    powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "$RutaLocalScript" -AccionFlasheada "ACTUALIZACION"
-                    exit
-                }
-            }
+    if (-not [string]::IsNullOrWhiteSpace($CodigoRemoto) -and $CodigoRemoto -match "SISTEMA DE ALERTAS") {
+        $CodigoLocal = Get-Content -Path $RutaLocalScript -Raw
+        if ($CodigoRemoto -ne $CodigoLocal) {
+            $CodigoRemoto | Out-File -FilePath $RutaLocalScript -Encoding utf8 -Force
+            powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "$RutaLocalScript" -AccionFlasheada "ACTUALIZACION"
+            exit
         }
     }
-} catch {} finally {
-    if (Test-Path $RutaTempZipUpdate) { Remove-Item -Path $RutaTempZipUpdate -Force -ErrorAction SilentlyContinue }
-    if (Test-Path $FolderTempUpdate) { Remove-Item -Path $FolderTempUpdate -Recurse -Force -ErrorAction SilentlyContinue }
+} catch {
+    # Absorción defensiva: Si el cliente no tiene internet temporalmente, continúa con el script local
 }
 # =========================================================================
 
-# 1. CARGAR CONFIGURACION LOCAL
+# 1. CARGAR CONFIGURACIÓN LOCAL (Firma de identidad sembrada por el instalador)
 $RutaConfigJson = "$env:SystemRoot\Setup\Scripts\config.json"
 if (Test-Path $RutaConfigJson) {
     $Config = Get-Content -Path $RutaConfigJson -Raw | ConvertFrom-Json
@@ -59,7 +46,7 @@ if (Test-Path $RutaConfigJson) {
     $ID_Corto = "DESCONOCIDO"; $Empresa = "GENERICO"; $Equipo = "GENERICO"
 }
 
-# 2. EXTRACCION DE HARDWARE COMPLETA (INVENTARIO DINAMICO)
+# 2. EXTRACCIÓN DE HARDWARE (Mapeo lógico de Workstation)
 try {
     $NombreRed = $env:COMPUTERNAME
     $ProcInfo = (Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue).Name
@@ -73,6 +60,7 @@ try {
     $NombreRed = "ERROR"; $ProcLimpio = "ERROR"; $RamGB = 0; $OSLimpio = "ERROR"; $ModeloBase = "ERROR"
 }
 
+# 3. PROCESAMIENTO E INDEXACIÓN PARA SUS 4 DISCOS FÍSICOS
 $ListaDiscosProcesados = @()
 try {
     $DiscosFisicos = Get-CimInstance -ClassName Win32_DiskDrive -ErrorAction SilentlyContinue
@@ -87,7 +75,7 @@ try {
     }
 } catch { $ListaDiscosProcesados += "ERROR_LECTURA" }
 
-# 3. EJECUCION DE MONITORES DE FALLAS DIARIOS
+# 4. EJECUCIÓN DE MONITORES DE SÍNTOMAS DIARIOS (10:00 AM)
 $HuboFalla = $false
 $DetallesNovedad = @()
 
@@ -150,29 +138,28 @@ try {
 } catch {}
 
 # =========================================================================
-# 4. MUTACIÓN DEL PAYLOAD: MONITOREO DIARIO AUTOMATICO VS MANUAL DE TALLER
+# 5. EMBUDO INTERCEPTOR: MONITOREO AUTOMÁTICO VS REGISTRO DE ASISTENTE SSD
 # =========================================================================
 $UrlGoogleSheet = "https://script.google.com/macros/s/AKfycbymkchj7VEC1Ik4d843O3YF-NnDapFe6wKfACEn4aXptIiilZ1wW9__AkCWY6hLoCqv/exec"
 
-# Comportamiento por defecto (Ejecución Diaria Automática)
 $AccionAuditoria = $AccionFlasheada
 $StringDetalles  = "Escaneo completado sin novedades."
 
-# FUNNEL INTERCEPTOR: Si le pasas parámetros desde RegistrarServicio.ps1, se reescribe el log
+# Si pasas parámetros desde el script del SSD, destruye el flujo automático y clava tus notas
 if (-not [string]::IsNullOrWhiteSpace($AccionTaller)) {
     $AccionAuditoria = $AccionTaller.Trim().ToUpper()
     $StringDetalles  = if (-not [string]::IsNullOrWhiteSpace($DetalleTaller)) { $DetalleTaller.Trim() } else { "Servicio tecnico ejecutado en taller." }
 } else {
-    # Si no hay parámetros manuales, aplica las reglas del motor de fallas diario
+    # Flujo por defecto de la tarea programada diaria
     if ($HuboFalla) {
         $AccionAuditoria = "NOVEDAD"
         $StringDetalles  = $DetallesNovedad -join " | "
     } elseif ($AccionAuditoria -eq "ACTUALIZACION") {
-        $StringDetalles  = "El agente aplico un parche de codigo en caliente desde un contenedor ZIP con exito."
+        $StringDetalles  = "El agente aplico un parche de codigo en caliente desde GitHub con exito."
     }
 }
 
-# Armado final unificado del JSON
+# Construcción unificada del paquete JSON
 $PayloadUnificado = @{
     id_corto   = $ID_Corto
     empresa    = $Empresa
@@ -191,8 +178,14 @@ $PayloadUnificado = @{
     }
 } | ConvertTo-Json -Compress
 
+# Envío directo hacia la Web App (Alineación exacta de 12 columnas en Inventario)
 try {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     Invoke-RestMethod -Uri $UrlGoogleSheet -Method Post -Body $PayloadUnificado -ContentType "application/json" -TimeoutSec 15 | Out-Null
 } catch {}
 # =========================================================================
+
+
+
+# COMENTARIO DE PRUEBA LOCAL 12345 
+# Prueba de Actaulizacion en caliente 67890
