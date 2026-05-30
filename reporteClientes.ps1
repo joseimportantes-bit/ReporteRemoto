@@ -13,7 +13,7 @@ param (
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # =========================================================================
-# MODULO DE AUTO-ACTUALIZACION SILENCIOSA (GITHUB RAW)
+# MODULO DE AUTO-ACTUALIZACION SILENCIOSA (GITHUB RAW - V6.2 CORREGIDA)
 # =========================================================================
 $UrlScriptRemoto  = "https://raw.githubusercontent.com/joseimportantes-bit/ReporteRemoto/main/reporteClientes.ps1"
 $RutaLocalScript  = $MyInvocation.MyCommand.Path
@@ -24,15 +24,25 @@ try {
     
     if (-not [string]::IsNullOrWhiteSpace($CodigoRemoto) -and $CodigoRemoto -match "SISTEMA DE ALERTAS") {
         $CodigoLocal = Get-Content -Path $RutaLocalScript -Raw
-        if ($CodigoRemoto -ne $CodigoLocal) {
+        
+        # NORMALIZACIÓN TÉCNICA: Removemos espacios y saltos de línea para una comparación limpia
+        $RemotoLimpio = $CodigoRemoto -replace '\s+', ''
+        $LocalLimpio  = $CodigoLocal  -replace '\s+', ''
+        
+        # Si el contenido real cambió en GitHub, aplicamos el parche en caliente
+        if ($RemotoLimpio -ne $LocalLimpio) {
+            # Guardamos forzando codificación UTF-8 pura
             $CodigoRemoto | Out-File -FilePath $RutaLocalScript -Encoding utf8 -Force
+            
+            # Lanzamos la instancia de aviso y cerramos la vieja
             powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "$RutaLocalScript" -AccionFlasheada "ACTUALIZACION"
             exit
         }
     }
 } catch {
-    # Absorción defensiva: Si el cliente no tiene internet temporalmente, continúa con el script local
+    # Absorción defensiva: Continúa localmente si falla la red
 }
+
 # =========================================================================
 
 # 1. CARGAR CONFIGURACIÓN LOCAL (Firma de identidad sembrada por el instalador)
