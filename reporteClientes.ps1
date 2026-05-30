@@ -159,3 +159,4 @@ try {
     Invoke-RestMethod -Uri $UrlGoogleSheet -Method Post -Body $PayloadUnificado -ContentType "application/json" -TimeoutSec 15 | Out-Null
 } catch {}
 # =========================================================================
+# Version 1.3.0
