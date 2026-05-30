@@ -1,9 +1,9 @@
 # ACTUALIZADOR Y LANZADOR DEL SISTEMA DE ALERTAS TEMPRANAS V1.0
-$OutputEncoding = [System.Text.Encoding]::UTF8
-
 param(
     [string]$AccionFlasheada = "MONITOREO"
 )
+
+$OutputEncoding = [System.Text.Encoding]::UTF8
 
 $Destino = "$env:SystemRoot\Setup\Scripts"
 $UrlBase = "https://raw.githubusercontent.com/joseimportantes-bit/ReporteRemoto/main"
