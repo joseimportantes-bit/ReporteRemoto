@@ -34,6 +34,8 @@ if ([string]::IsNullOrWhiteSpace($ApiKey)) {
     }
 }
 
+$ModoInicial = if ($Config -and $Config.modo_ejecucion) { $Config.modo_ejecucion.ToString().Trim() } else { "1" }
+
 # 2. EXTRACCIÓN DE HARDWARE (Mapeo lógico de Workstation)
 try {
     $NombreRed = $env:COMPUTERNAME
@@ -145,17 +147,17 @@ if (-not [string]::IsNullOrWhiteSpace($AccionTaller)) {
     }
 }
 
-# Construcción unificada del paquete JSON
 $PayloadUnificado = @{
-    id_corto   = $ID_Corto
-    empresa    = $Empresa
-    equipo     = $Equipo
-    fecha      = (Get-Date -Format 'yyyy-MM-dd')
-    hora       = (Get-Date -Format 'HH:mm:ss')
-    accion     = $AccionAuditoria
-    detalles   = $StringDetalles
-    api_key    = $ApiKey
-    hardware   = @{
+    id_corto      = $ID_Corto
+    empresa       = $Empresa
+    equipo        = $Equipo
+    fecha         = (Get-Date -Format 'yyyy-MM-dd')
+    hora          = (Get-Date -Format 'HH:mm:ss')
+    accion        = $AccionAuditoria
+    detalles      = $StringDetalles
+    api_key       = $ApiKey
+    modo_inicial  = $ModoInicial
+    hardware      = @{
         nombre_red        = $NombreRed.ToUpper()
         procesador        = $ProcLimpio
         ram_gb            = $RamGB
@@ -172,9 +174,7 @@ try {
     if ($Respuesta.modo -and ($Respuesta.modo -eq "1" -or $Respuesta.modo -eq "2")) {
         if (Test-Path $RutaConfigJson) {
             $Config = Get-Content $RutaConfigJson -Raw | ConvertFrom-Json
-            $ModoLocal = if ($Config.modo_ejecucion) { $Config.modo_ejecucion.ToString().Trim() } else { "" }
-            # Solo sobreescribe si el local está vacío o la tarea no coincide con el modo local
-            if ([string]::IsNullOrWhiteSpace($ModoLocal)) {
+            if ($Config.modo_ejecucion -ne $Respuesta.modo) {
                 $Config | Add-Member -NotePropertyName "modo_ejecucion" -NotePropertyValue $Respuesta.modo -Force
                 $Config | ConvertTo-Json | Out-File $RutaConfigJson -Encoding utf8 -Force
             }
