@@ -117,7 +117,7 @@ try {
 # =========================================================================
 # 5. EMBUDO INTERCEPTOR: MONITOREO AUTOMÁTICO VS REGISTRO DE ASISTENTE SSD
 # =========================================================================
-$UrlGoogleSheet = "https://script.google.com/macros/s/AKfycbymkchj7VEC1Ik4d843O3YF-NnDapFe6wKfACEn4aXptIiilZ1wW9__AkCWY6hLoCqv/exec"
+$UrlGoogleSheet = "https://script.google.com/macros/s/AKfycbwOgJUbTiM7pbHAR0yYSkhY-YiRuEPUc30403xdpWz4Md49J04Kyun-XILuUYhd4XiqpA/exec"
 
 $AccionAuditoria = $AccionFlasheada
 $StringDetalles  = "Escaneo completado sin novedades."
@@ -156,7 +156,39 @@ $PayloadUnificado = @{
 # Envío directo hacia la Web App (Alineación exacta de 12 columnas en Inventario)
 try {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    Invoke-RestMethod -Uri $UrlGoogleSheet -Method Post -Body $PayloadUnificado -ContentType "application/json" -TimeoutSec 15 | Out-Null
+    $Respuesta = Invoke-RestMethod -Uri $UrlGoogleSheet -Method Post -Body $PayloadUnificado -ContentType "application/json" -TimeoutSec 15
+    if ($Respuesta.modo) {
+        if (Test-Path $RutaConfigJson) {
+            $Config = Get-Content $RutaConfigJson -Raw | ConvertFrom-Json
+            if ($Config.modo_ejecucion -ne $Respuesta.modo -and ($Respuesta.modo -eq "1" -or $Respuesta.modo -eq "2")) {
+                $Config | Add-Member -NotePropertyName "modo_ejecucion" -NotePropertyValue $Respuesta.modo -Force
+                $Config | ConvertTo-Json | Out-File $RutaConfigJson -Encoding utf8 -Force
+            }
+        }
+    }
+} catch {}
+
+# =========================================================================
+# AUTO-ACTUALIZACION DEL ACTUALIZADOR
+# =========================================================================
+try {
+    $RutaActualizador = "$env:SystemRoot\Setup\Scripts\Actualizador.ps1"
+    $UrlActualizador = "https://raw.githubusercontent.com/joseimportantes-bit/ReporteRemoto/main/Actualizador.ps1"
+
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    $CodigoLocal = Get-Content $RutaActualizador -Raw
+    $CodigoRemoto = Invoke-RestMethod $UrlActualizador -TimeoutSec 15
+
+    if (-not [string]::IsNullOrWhiteSpace($CodigoRemoto) -and $CodigoRemoto -match "SISTEMA DE ALERTAS") {
+        if ($CodigoLocal -match '\$ScriptVersion\s*=\s*"([^"]+)"') {
+            $VersionLocal = $Matches[1]
+            if ($CodigoRemoto -match '\$ScriptVersion\s*=\s*"([^"]+)"') {
+                $VersionRemota = $Matches[1]
+                if ($VersionLocal -ne $VersionRemota) {
+                    $CodigoRemoto | Out-File $RutaActualizador -Encoding utf8 -Force
+                }
+            }
+        }
+    }
 } catch {}
 # =========================================================================
-# Version 1.3.0
