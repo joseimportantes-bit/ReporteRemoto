@@ -169,10 +169,12 @@ $PayloadUnificado = @{
 try {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     $Respuesta = Invoke-RestMethod -Uri $UrlGoogleSheet -Method Post -Body $PayloadUnificado -ContentType "application/json" -TimeoutSec 15
-    if ($Respuesta.modo) {
+    if ($Respuesta.modo -and ($Respuesta.modo -eq "1" -or $Respuesta.modo -eq "2")) {
         if (Test-Path $RutaConfigJson) {
             $Config = Get-Content $RutaConfigJson -Raw | ConvertFrom-Json
-            if ($Config.modo_ejecucion -ne $Respuesta.modo -and ($Respuesta.modo -eq "1" -or $Respuesta.modo -eq "2")) {
+            $ModoLocal = if ($Config.modo_ejecucion) { $Config.modo_ejecucion.ToString().Trim() } else { "" }
+            # Solo sobreescribe si el local está vacío o la tarea no coincide con el modo local
+            if ([string]::IsNullOrWhiteSpace($ModoLocal)) {
                 $Config | Add-Member -NotePropertyName "modo_ejecucion" -NotePropertyValue $Respuesta.modo -Force
                 $Config | ConvertTo-Json | Out-File $RutaConfigJson -Encoding utf8 -Force
             }
