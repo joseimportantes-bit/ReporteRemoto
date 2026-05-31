@@ -14,13 +14,24 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # 1. CARGAR CONFIGURACIÓN LOCAL (Firma de identidad sembrada por el instalador)
 $RutaConfigJson = "$env:SystemRoot\Setup\Scripts\config.json"
+$ApiKey = ""
 if (Test-Path $RutaConfigJson) {
     $Config = Get-Content -Path $RutaConfigJson -Raw | ConvertFrom-Json
     $ID_Corto = $Config.ID_Corto.ToString().ToUpper()
     $Empresa  = $Config.Empresa.ToString().ToUpper()
     $Equipo   = $Config.Equipo.ToString().ToUpper()
+    $ApiKey   = if ($Config.api_key) { $Config.api_key.ToString().Trim() } else { "" }
 } else {
     $ID_Corto = "DESCONOCIDO"; $Empresa = "GENERICO"; $Equipo = "GENERICO"
+}
+
+# Auto-generar api_key si no existe (actualización desde v1.5)
+if ([string]::IsNullOrWhiteSpace($ApiKey)) {
+    $ApiKey = [Guid]::NewGuid().ToString()
+    if ($Config) {
+        $Config | Add-Member -NotePropertyName "api_key" -NotePropertyValue $ApiKey -Force
+        $Config | ConvertTo-Json | Out-File $RutaConfigJson -Encoding utf8 -Force
+    }
 }
 
 # 2. EXTRACCIÓN DE HARDWARE (Mapeo lógico de Workstation)
@@ -143,6 +154,7 @@ $PayloadUnificado = @{
     hora       = (Get-Date -Format 'HH:mm:ss')
     accion     = $AccionAuditoria
     detalles   = $StringDetalles
+    api_key    = $ApiKey
     hardware   = @{
         nombre_red        = $NombreRed.ToUpper()
         procesador        = $ProcLimpio
