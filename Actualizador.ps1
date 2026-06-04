@@ -71,14 +71,18 @@ if (Test-Path $RutaConfig) {
 
 # =========================================================================
 # CONTROL DE EJECUCION DIARIA (evita multiples envios en modo inicio)
+# En modo inicio se permite bypass para capturar anomalías post-reinicio
 # =========================================================================
 $Hoy = Get-Date -Format "yyyy-MM-dd"
-if (Test-Path $RutaUltimo) {
-    $Ultimo = (Get-Content $RutaUltimo -Raw).Trim()
-    if ($Ultimo -eq $Hoy) {
-        exit
-    }
+$YaCorrioHoy = (Test-Path $RutaUltimo) -and ((Get-Content $RutaUltimo -Raw).Trim() -eq $Hoy)
+
+if ($YaCorrioHoy -and (Test-Path $RutaConfig)) {
+    $Cfg = Get-Content $RutaConfig -Raw | ConvertFrom-Json
+    if ($Cfg.modo_ejecucion -ne "2") { exit }
+} elseif ($YaCorrioHoy) {
+    exit
 }
+
 $Hoy | Out-File $RutaUltimo -Encoding utf8 -Force
 
-& $RutaAgente -AccionFlasheada $AccionFlasheada
+& $RutaAgente -AccionFlasheada $AccionFlasheada -YaCorrioHoy $YaCorrioHoy

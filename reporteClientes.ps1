@@ -7,7 +7,8 @@ param (
     
     # PARÁMETROS PARA INTERCEPTAR CONTROL MANUAL DESDE EL ASISTENTE DEL SSD
     [string]$AccionTaller,
-    [string]$DetalleTaller
+    [string]$DetalleTaller,
+    [bool]$YaCorrioHoy = $false
 )
 
 $OutputEncoding = [System.Text.Encoding]::UTF8
@@ -15,12 +16,17 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 # 1. CARGAR CONFIGURACIÓN LOCAL (Firma de identidad sembrada por el instalador)
 $RutaConfigJson = "$env:SystemRoot\Setup\Scripts\config.json"
 $ApiKey = ""
+$UUID_Completo = ""
 if (Test-Path $RutaConfigJson) {
     $Config = Get-Content -Path $RutaConfigJson -Raw | ConvertFrom-Json
     $ID_Corto = $Config.ID_Corto.ToString().ToUpper()
     $Empresa  = $Config.Empresa.ToString().ToUpper()
     $Equipo   = $Config.Equipo.ToString().ToUpper()
     $ApiKey   = if ($Config.api_key) { $Config.api_key.ToString().Trim() } else { "" }
+    $UUID_Completo = if ($Config.UUID) { $Config.UUID.ToString().ToUpper() } else { "" }
+    if (-not $UUID_Completo) {
+        try { $UUID_Completo = (Get-CimInstance Win32_ComputerSystemProduct -ErrorAction SilentlyContinue).UUID.ToUpper() } catch {}
+    }
 } else {
     $ID_Corto = "DESCONOCIDO"; $Empresa = "GENERICO"; $Equipo = "GENERICO"
 }
@@ -147,28 +153,42 @@ if (-not [string]::IsNullOrWhiteSpace($AccionTaller)) {
     }
 }
 
-$PayloadUnificado = @{
-    id_corto      = $ID_Corto
-    empresa       = $Empresa
-    equipo        = $Equipo
-    fecha         = (Get-Date -Format 'yyyy-MM-dd')
-    hora          = (Get-Date -Format 'HH:mm:ss')
-    accion        = $AccionAuditoria
-    detalles      = $StringDetalles
-    api_key       = $ApiKey
-    modo_inicial  = $ModoInicial
-    hardware      = @{
-        nombre_red        = $NombreRed.ToUpper()
-        procesador        = $ProcLimpio
-        ram_gb            = $RamGB
-        sistema_operativo = $OSLimpio
-        modelo_base       = $ModeloBase
-        discos            = $ListaDiscosProcesados
-    }
-} | ConvertTo-Json -Compress
+# Si ya corrió hoy (reintento post-reinicio): solo reportar si hay anomalía o acción manual
+if ($YaCorrioHoy -and -not $HuboFalla -and [string]::IsNullOrWhiteSpace($AccionTaller)) {
+    exit 0
+}
 
-# Envío directo hacia la Web App (Alineación exacta de 12 columnas en Inventario)
+# Mutex global para evitar que dos instancias envíen POST simultáneos
+$MutexName = "Global\AlertaTemprana_$ID_Corto"
+$Mutex = New-Object System.Threading.Mutex($false, $MutexName)
+$TieneMutex = $false
 try {
+    $TieneMutex = $Mutex.WaitOne(5000)
+    if (-not $TieneMutex) { exit 0 }
+} catch { exit 0 }
+
+try {
+    $PayloadUnificado = @{
+        id_corto      = $ID_Corto
+        empresa       = $Empresa
+        equipo        = $Equipo
+        fecha         = (Get-Date -Format 'yyyy-MM-dd')
+        hora          = (Get-Date -Format 'HH:mm:ss')
+        accion        = $AccionAuditoria
+        detalles      = $StringDetalles
+        api_key       = $ApiKey
+        modo_inicial  = $ModoInicial
+        uuid_completo = $UUID_Completo
+        hardware      = @{
+            nombre_red        = $NombreRed.ToUpper()
+            procesador        = $ProcLimpio
+            ram_gb            = $RamGB
+            sistema_operativo = $OSLimpio
+            modelo_base       = $ModeloBase
+            discos            = $ListaDiscosProcesados
+        }
+    } | ConvertTo-Json -Compress
+
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     $Respuesta = Invoke-RestMethod -Uri $UrlGoogleSheet -Method Post -Body $PayloadUnificado -ContentType "application/json" -TimeoutSec 15
     if ($Respuesta.modo -and ($Respuesta.modo -eq "1" -or $Respuesta.modo -eq "2")) {
@@ -180,7 +200,12 @@ try {
             }
         }
     }
-} catch {}
+} catch {
+    # Absorción defensiva
+} finally {
+    if ($TieneMutex) { [void]$Mutex.ReleaseMutex() }
+    $Mutex.Dispose()
+}
 
 # =========================================================================
 # AUTO-ACTUALIZACION DEL ACTUALIZADOR
