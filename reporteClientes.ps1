@@ -176,7 +176,6 @@ try {
         hora          = (Get-Date -Format 'HH:mm:ss')
         accion        = $AccionAuditoria
         detalles      = $StringDetalles
-        api_key       = $ApiKey
         modo_inicial  = $ModoInicial
         uuid_completo = $UUID_Completo
         hardware      = @{
